@@ -4,19 +4,6 @@ import os
 import numpy as np
 import pandas as pd
 
-
-def main():
-    # Add code for the main function here
-    combined_timestamps, combined_behavior = load_adjust_concatenate_datasets(
-        'your_data_path', 'timestamps_hungry.csv', 'behavior_hungry.csv', 
-        'timestamps_satiated.csv', 'behavior_satiated.csv')
-    
-    tracealigned, labelsaligned = align_and_interpolate(dpath, combined_timestamps, combined_behavior, tracenew, labelsnew)
-    pass
-
-if __name__ == "__main__":
-    main()
-
 # Step 1 parse
 def parse_scope_times(exp_path, id_path):
     """
@@ -141,6 +128,10 @@ def concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,
     timestamps_satiated = pd.read_csv(os.path.join(dpath, timestamps_satiated_file))
     behavior_satiated = pd.read_csv(os.path.join(dpath, behavior_satiated_file))
 
+    # Convert behavior time to ms
+    behavior_hungry['Time'] *= 1000
+    behavior_satiated['Time'] *= 1000
+
     # Calculate the gap and adjust the satiated behavior timestamps
     last_time_hungry = behavior_hungry['Time'].iloc[-1]
     first_time_satiated = behavior_satiated['Time'].iloc[0]
@@ -150,11 +141,11 @@ def concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,
     behavior_satiated['Time'] -= time_gap
 
     # Correct the satiated timestamps
-    time_offset = behavior_satiated['Time'].iloc[0] * 1000 # convert to ms
-    time_stamps_satiated_corrected['Time Stamp (ms)'] += time_offset
+    time_offset = behavior_satiated['Time'].iloc[0] * 1000
+    timestamps_satiated['Time Stamp (ms)'] += time_offset
 
     # Concatenate datasets
-    combined_timestamps = pd.concat([timestamps_hungry, time_stamps_satiated_corrected], ignore_index=True)
+    combined_timestamps = pd.concat([timestamps_hungry, timestamps_satiated], ignore_index=True)
     combined_behavior = pd.concat([behavior_hungry, behavior_satiated], ignore_index=True)
 
     return combined_timestamps, combined_behavior
@@ -210,4 +201,25 @@ def align_and_interpolate(dpath, timestamps_file_name, behavior_file_name, trace
     labelsaligned = np.hstack((labelsnew, 'cue', 'bar'))
 
     return tracealigned, labelsaligned
+
+def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
+    """
+    Saves the aligned trace and labels to a pickle file.
+
+    Args:
+        tracealigned (numpy.ndarray): The aligned trace data.
+        labelsaligned (numpy.ndarray): The labels for the aligned trace data.
+        output_path_calcium (str): The output path where the pickle file will be saved.
+        animal_id (str): The ID of the animal for which the pickle file will be saved.
+    """
+    # Save the aligned trace and labels to a pickle file
+    df = pd.DataFrame(data=tracealigned, index=labelsaligned)
+    df.to_pickle(os.path.join(output_path_calcium, str(animal_id + ".pkl")))
+
+# Output just one pickle since we've combined
+
+""" e.g.
+df = pd.DataFrame(data = tracealigned, index = labelsaligned)
+df.to_pickle(os.path.join(output_path_spike, str(animal_id+"_S.pkl")))
+"""
 
