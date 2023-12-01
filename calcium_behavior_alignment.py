@@ -100,7 +100,11 @@ def process_animal_data(dpath, scope_times, animal_id):
         # Assuming specific file naming convention
         timeStamps_file = dpath + 'timeStamps.csv'
         behavior_file = dpath + f'{animal_id}_Satiation_recording_behavior.csv'
-        return timeStamps_file, behavior_file
+
+        timestamps = pd.read_csv(os.path.join(dpath, timeStamps_file))
+        behavior = pd.read_csv(os.path.join(dpath, behavior_file))
+
+        return timestamps, behavior
 
 # Part of step two
 def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file, 
@@ -150,7 +154,7 @@ def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,
 
     return combined_timestamps, combined_behavior
 
-# Step 4 Spikes
+# Step 3 Spikes
 def process_spikes_and_calcium(minian_ds):
     """
     Processes spikes and calcium data from the given minian dataset.
@@ -170,6 +174,7 @@ def process_spikes_and_calcium(minian_ds):
 
     return tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium
 
+# Part of step 3
 def _process_helper(minian_ds, label_str):
     """
     Helper function for processing spikes or calcium data from the given minian dataset.
@@ -212,15 +217,15 @@ def _process_helper(minian_ds, label_str):
 
     return tracenew, labelsnew
 
-# Step 5 align and interpolate
-def align_and_interpolate(dpath, timestamps_file_name, behavior_file_name, tracenew, labelsnew):
+# Step 4 align and interpolate
+def align_and_interpolate(dpath, ca_timestamps, behavior_data, tracenew, labelsnew):
     """
     Aligns and interpolates behavioral data with calcium timestamps.
 
     Args:
         dpath (str): The directory path where the CSV files are located.
-        timestamps_file_name (str): The file name of the CSV file containing calcium timestamps.
-        behavior_file_name (str): The file name of the CSV file containing behavioral data.
+        ca_timestamp (pandas.core.frame.DataFrame): The calcium timestamps.
+        behavior_data (pandas.core.frame.DataFrame): The behavioral data.
         tracenew (numpy.ndarray): The calcium trace data.
         labelsnew (numpy.ndarray): The labels for the calcium trace data.
 
@@ -229,10 +234,10 @@ def align_and_interpolate(dpath, timestamps_file_name, behavior_file_name, trace
 
     """
     # Load calcium timestamps from a CSV file
-    CA = pd.read_csv(os.path.join(dpath, timestamps_file_name))
+    CA = ca_timestamps
 
     # Load behavioral data from another CSV file
-    Behavior = pd.read_csv(os.path.join(dpath, behavior_file_name))
+    Behavior = behavior_data
 
     # Extract time column from behavioral data and adjust it for when miniscope record active is triggered
     behaviortime = Behavior['Time'].values
@@ -265,6 +270,7 @@ def align_and_interpolate(dpath, timestamps_file_name, behavior_file_name, trace
 
     return tracealigned, labelsaligned
 
+# Step 5 save
 def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
     """
     Saves the aligned trace and labels to a pickle file.
@@ -279,10 +285,4 @@ def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, anim
     df = pd.DataFrame(data=tracealigned, index=labelsaligned)
     df.to_pickle(os.path.join(output_path_calcium, str(animal_id + ".pkl")))
 
-# Output just one pickle since we've combined
-
-""" e.g.
-df = pd.DataFrame(data = tracealigned, index = labelsaligned)
-df.to_pickle(os.path.join(output_path_spike, str(animal_id+"_S.pkl")))
-"""
 
