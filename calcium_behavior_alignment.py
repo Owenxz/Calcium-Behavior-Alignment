@@ -60,11 +60,10 @@ def parse_scope_times(exp_path, id_path):
     return scope_times
 
 # Step two process animal data based on ID
-def process_animal_data(dpath, scope_times, animal_id):
+def parse_behavior_times(beh_path, experiment, animal_ids):
     """
-    Concatenates animal data based on the provided animal ID. If the animal ID is found in the scope_times dictionary
-    and has exactly 2 entries, it combines hungry and satiated behavior datasets. Otherwise, it returns the timeStamps.csv
-    and behavior.csv files for the given animal ID.
+    Read the behavioral data csv files from beh_path based on experiment name and animal_id and stores the contents in a
+    dictionary keyed by these IDs.
 
     Args:
         dpath (str): The path to the directory containing the animal data.
@@ -76,38 +75,73 @@ def process_animal_data(dpath, scope_times, animal_id):
         combined timestamps and behavior datasets. Otherwise, it returns the paths to the timeStamps.csv and behavior.csv
         files.
     """
-    if animal_id in scope_times and len(scope_times[animal_id]) == 2:
-        path = os.path.join(dpath, animal_id)
-
-        # Assuming specific file naming convention
-        timestamps_hungry_file = dpath + 'timeStamps_hunger.csv'
-        behavior_hungry_file = dpath + f'{animal_id}_Satiation_recording_behavior_hungry.csv'
-        timestamps_satiated_file = dpath + 'timeStamps_satiated.csv'
-        behavior_satiated_file = dpath + f'{animal_id}_Satiation_recording_behavior_satiated.csv'
-
-        combined_timestamps, combined_behavior = _concatenate_datasets(dpath=path, 
-                                                                      timestamps_hungry_file=timestamps_hungry_file, 
-                                                                      behavior_hungry_file=behavior_hungry_file,
-                                                                      timestamps_satiated_file=timestamps_satiated_file,
-                                                                      behavior_satiated_file=behavior_satiated_file)
-        
-        return combined_timestamps, combined_behavior
     
-    else:
-        # Just return the timeStamps.csv and behavior.csv files
-        path = os.path.join(dpath, animal_id)
+    # Get a list of all files in the base directory and directly construct the full file paths for the relevant CSV files
+    file_paths = [os.path.join(beh_path, file) for file in os.listdir(beh_path)
+                      if file.startswith(experiment) and file.endswith(".csv")]
 
-        # Assuming specific file naming convention
-        timeStamps_file = dpath + 'timeStamps.csv'
-        behavior_file = dpath + f'{animal_id}_Satiation_recording_behavior.csv'
+    # Dictionary to hold the CSV contents, keyed by animal IDs
+    behavior_data = {}
 
-        timestamps = pd.read_csv(os.path.join(dpath, timeStamps_file))
-        behavior = pd.read_csv(os.path.join(dpath, behavior_file))
+    for file_path in file_paths:
+        # Extract the filename from the path
+        filename = os.path.basename(file_path)
+        
+        # Extract the animal ID from the filename
+        parts = filename.split('_')
+        if len(parts) > 2:
+            if parts[1] in animal_ids: # Animal ID is between the first and second underscore
+                
+                animal_id = parts[1]
+                
+                # Read the CSV file
+                df = pd.read_csv(file_path)
 
-        return timestamps, behavior
+                # Add the DataFrame to the animal_data dictionary
+                if animal_id not in behavior_data:
+                    behavior_data[animal_id] = df
+                else:
+                    print(f"File number error: {animal_id} has more tha one behavior file for {experiment}")
+        else:
+            print(f"Filename format error: {filename}")
 
-# Part of step two
-def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file, 
+    return behavior_data
+
+#     if animal_id in scope_times and len(scope_times[animal_id]) == 2:
+#         path = os.path.join(dpath, animal_id)
+
+#         # Assuming specific file naming convention
+#         timestamps_hungry_file = dpath + 'timeStamps_hunger.csv'
+#         behavior_hungry_file = dpath + f'{animal_id}_Satiation_recording_behavior_hungry.csv'
+#         timestamps_satiated_file = dpath + 'timeStamps_satiated.csv'
+#         behavior_satiated_file = dpath + f'{animal_id}_Satiation_recording_behavior_satiated.csv'
+
+#         combined_timestamps, combined_behavior = _concatenate_datasets(dpath=path, 
+#                                                                       timestamps_hungry_file=timestamps_hungry_file, 
+#                                                                       behavior_hungry_file=behavior_hungry_file,
+#                                                                       timestamps_satiated_file=timestamps_satiated_file,
+#                                                                       behavior_satiated_file=behavior_satiated_file)
+        
+#         return combined_timestamps, combined_behavior
+    
+#     else:
+#         # Just return the timeStamps.csv and behavior.csv files
+#         path = os.path.join(dpath, animal_id)
+
+#         # Assuming specific file naming convention
+#         timeStamps_file = dpath + 'timeStamps.csv'
+#         behavior_file = dpath + f'{animal_id}_Satiation_recording_behavior.csv'
+
+#         timestamps = pd.read_csv(os.path.join(dpath, timeStamps_file))
+#         behavior = pd.read_csv(os.path.join(dpath, behavior_file))
+
+#         return timestamps, behavior
+
+# Part of step two 
+""" Please modify this code to read directly from scope_time and behavior, and concatenate scope_time if there are two entires
+per animal. Behavior time will alwasy be one single file. 
+"""
+def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,  
                                     timestamps_satiated_file, behavior_satiated_file):
     """
     Helper function that concatenates two datasets of timestamps and behavior, adjusting the timestamps
