@@ -85,7 +85,7 @@ def process_animal_data(dpath, scope_times, animal_id):
         timestamps_satiated_file = dpath + 'timeStamps_satiated.csv'
         behavior_satiated_file = dpath + f'{animal_id}_Satiation_recording_behavior_satiated.csv'
 
-        combined_timestamps, combined_behavior = concatenate_datasets(dpath=path, 
+        combined_timestamps, combined_behavior = _concatenate_datasets(dpath=path, 
                                                                       timestamps_hungry_file=timestamps_hungry_file, 
                                                                       behavior_hungry_file=behavior_hungry_file,
                                                                       timestamps_satiated_file=timestamps_satiated_file,
@@ -102,11 +102,11 @@ def process_animal_data(dpath, scope_times, animal_id):
         behavior_file = dpath + f'{animal_id}_Satiation_recording_behavior.csv'
         return timeStamps_file, behavior_file
 
-
-def concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file, 
+# Part of step two
+def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file, 
                                     timestamps_satiated_file, behavior_satiated_file):
     """
-    Concatenates two datasets of timestamps and behavior, adjusting the timestamps
+    Helper function that concatenates two datasets of timestamps and behavior, adjusting the timestamps
     of the second dataset to align with the first dataset. This function also removes
     any time gaps between the the two behavior datasets.
 
@@ -150,6 +150,69 @@ def concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,
 
     return combined_timestamps, combined_behavior
 
+# Step 4 Spikes
+def process_spikes_and_calcium(minian_ds):
+    """
+    Processes spikes and calcium data from the given minian dataset.
+
+    Args:
+        minian_ds (xarray.core.dataset.Dataset): The minian dataset.
+
+    Returns:
+        tuple: A tuple containing the processed spike and calcium data.
+    
+    """
+    # Process Spikes
+    tracenew_spike, labelsnew_spike = _process_helper(minian_ds, "S")
+
+    # Process Calcium
+    tracenew_calcium, labelsnew_calcium = _process_helper(minian_ds, "C")
+
+    return tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium
+
+def _process_helper(minian_ds, label_str):
+    """
+    Helper function for processing spikes or calcium data from the given minian dataset.
+
+    Args:
+        minian_ds (xarray.core.dataset.Dataset): The minian dataset.
+        label_str (str): The label string.
+
+    Returns:
+        tuple: A tuple containing the processed spike or calcium data.
+    
+    """
+    # frameend = subset1.get('frame').stop - subset1.get('frame').start+1
+    trace = minian_ds[label_str].values.T
+    # trace = trace[:frameend] # I don't know if this is still needed
+
+    neuron_ori = len(trace[0])
+    labels = minian_ds[label_str].unit_labels.values
+    id = minian_ds[label_str].unit_id.values
+    tracenew = trace
+    (unique, counts) = np.unique(labels, return_counts = True)
+    repeated = np.where(counts > 1)
+    repeatedvalue = unique[repeated]
+    repeatedind=np.array([],dtype = int)
+    repeatedind1st=np.array([],dtype = int)
+    for i in range(0,len(repeatedvalue)):
+        t = np.where(labels==repeatedvalue[i])[0]
+        f = t[0]
+        repeatedind = np.append(repeatedind, t)
+        repeatedind1st = np.append(repeatedind1st, f)
+        tracenew[:,f] = np.max(trace[:,t],axis = 1)
+
+    todelete = np.union1d(np.setdiff1d(repeatedind,repeatedind1st), np.where(labels == -1))
+    tracenew = np.delete(tracenew,todelete,1)
+    labelsnew = np.delete(labels, todelete)
+    neuron_del = len(todelete)
+    neuron_now = len(tracenew[0])
+
+    print ('Deleted ' + str(neuron_del) + ' neurons out of the original ' + str(neuron_ori) + ' neurons, ' + str(neuron_now) + ' neurons remain')
+
+    return tracenew, labelsnew
+
+# Step 5 align and interpolate
 def align_and_interpolate(dpath, timestamps_file_name, behavior_file_name, tracenew, labelsnew):
     """
     Aligns and interpolates behavioral data with calcium timestamps.
