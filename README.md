@@ -24,7 +24,7 @@ In addition to modulated functions for Jupyter notebook usage, there is also a C
 - `-n, --num_processes`: The number of processes to use for multiprocessing (default: 2)
 - `-v, --verbose`: Whether to print verbose output. Helpful for debugging.
 
-#### Example
+### Example
 ``` bash
 python calcium_behavior_alignment.py /scratch/09117/xz6783/minian/Satiation/ /scratch/09117/xz6783/minian/Satiation/Session Combined/ /scratch/09117/xz6783/minian/Behavior_Files/ Satiation -n 5 -v
 ```
