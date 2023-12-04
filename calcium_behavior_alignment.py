@@ -1,11 +1,102 @@
 import glob
+import multiprocessing as mp
 import os
+import argparse
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from minian.utilities import open_minian
+
+def main():
+    # Command-line arguments parsing
+    arg_parser = argparse.ArgumentParser(description="Calcium-behavior alignment pipeline")
+
+    # Define the arguments
+    arg_parser.add_argument("exp_path", type=str, help="The path to the experiment directory (e.g. /scratch/09117/xz6783/minian/Satiation/)")
+    arg_parser.add_argument("id_path", type=str, help="The path to the animal ID directory (e.g. /scratch/09117/xz6783/minian/Satiation/Session Combined/)")
+    arg_parser.add_argument("beh_path", type=str, help="The path to the behavioral data directory (e.g. /scratch/09117/xz6783/minian/Behavior_Files/)")
+    arg_parser.add_argument("experiment", type=str, help="The name of the experiment (e.g. Satiation)")
+    arg_parser.add_argument("-n", "--num_processes", type=int, default=2, help="The number of processes to use for multiprocessing (default: 2)")
+    arg_parser.add_argument("-v", "--verbose", action="store_true", help="Whether to print verbose output")
+
+    # Parse the arguments
+    args = arg_parser.parse_args()
+
+    # Initialize the argument variables
+    exp_path = args.exp_path
+    id_path = args.id_path
+    beh_path = args.beh_path
+    experiment = args.experiment
+    num_processes = args.num_processes
+    verbose = args.verbose
+
+    # Execute the pipeline
+    if verbose:
+        print("Executing calcium-behavior alignment pipeline")
+
+    execute(exp_path, id_path, beh_path, experiment, num_processes, verbose)
+
+    if verbose:
+        print("Finished executing calcium-behavior alignment pipeline")
+
+
+
+def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=False):
+    """
+    Executes the calcium-behavior alignment pipeline.
+
+    Args:
+        exp_path (str): The path to the experiment directory.
+        id_path (str): The path to the animal ID directory.
+        beh_path (str): The path to the behavioral data directory.
+        experiment (str): The name of the experiment.
+        num_processes (int): The number of processes to use for multiprocessing.
+        verbose (bool): Whether to print verbose output.
+
+    Returns:
+        bool: True if the pipeline executed successfully, False otherwise.
+    """
+    # For each path, check if it exists
+    if verbose:
+        if not os.path.exists(exp_path):
+            print(f"Error: Experiment path {exp_path} does not exist")
+            return False
+        else:
+            print(f"Experiment path: {exp_path}")
+
+        if not os.path.exists(id_path):
+            print(f"Error: Experiment path {id_path} does not exist")
+            return False
+        else:
+            print(f"Experiment path: {id_path}")
+
+        if not os.path.exists(beh_path):
+            print(f"Error: Experiment path {beh_path} does not exist")
+            return False
+        else:
+            print(f"Experiment path: {beh_path}")
+
+    # Step 1 parse scope_times and behavior_data
+    scope_times = parse_scope_times(exp_path, id_path, verbose)
+    animal_ids = list(scope_times.keys())
+    behavior_data = parse_behavior_times(beh_path, experiment, animal_ids)
+
+    # Step 2 process animal data based on ID
+    # Process and align spikes and calcium via multiprocessing
+    if verbose:
+        print(f"Processing and aligning {len(animal_ids)} animal IDs with {num_processes} process(es)")
+
+    with mp.Pool(processes=num_processes) as pool:
+        results = [pool.apply_async(process_and_align, args=(animal_id, id_path, scope_times[animal_id], behavior_data, verbose))
+                   for animal_id in animal_ids]
+        
+        output = [p.get() for p in results]
+
+    return True
 
 # Step 1 parse
-def parse_scope_times(exp_path, id_path):
+def parse_scope_times(exp_path, id_path, verbose=False):
     """
     Parses the scope times from the given experiment path and animal ID path.
 
@@ -57,6 +148,24 @@ def parse_scope_times(exp_path, id_path):
             if entries_count > 2:
                 break  # Break out of the outer loop as well
 
+    # Print summary of scope times
+    if verbose:
+        print(f"Found {len(scope_times)} animal IDs")
+        print(f"Animal IDs: {scope_times.keys()}")
+        print(f"Found {entries_count} entries")
+
+        # Number of animals with two entries
+        two_entries_count = len([animal_id for animal_id in scope_times if len(scope_times[animal_id]) == 2])
+        print(f"Found {two_entries_count} animal IDs with two entries")
+        
+        # Number of animals with one entry
+        one_entry_count = len([animal_id for animal_id in scope_times if len(scope_times[animal_id]) == 1])
+        print(f"Found {one_entry_count} animal IDs with one entry")
+
+        # Erronous animal IDs, i.e. animals with no entries or more than two entries
+        erronous_animal_ids = [animal_id for animal_id in scope_times if len(scope_times[animal_id]) not in [1, 2]]
+        print(f"Erronous animal IDs: {erronous_animal_ids}")
+
     return scope_times
 
 # Step two process animal data based on ID
@@ -107,89 +216,98 @@ def parse_behavior_times(beh_path, experiment, animal_ids):
 
     return behavior_data
 
-#     if animal_id in scope_times and len(scope_times[animal_id]) == 2:
-#         path = os.path.join(dpath, animal_id)
-
-#         # Assuming specific file naming convention
-#         timestamps_hungry_file = dpath + 'timeStamps_hunger.csv'
-#         behavior_hungry_file = dpath + f'{animal_id}_Satiation_recording_behavior_hungry.csv'
-#         timestamps_satiated_file = dpath + 'timeStamps_satiated.csv'
-#         behavior_satiated_file = dpath + f'{animal_id}_Satiation_recording_behavior_satiated.csv'
-
-#         combined_timestamps, combined_behavior = _concatenate_datasets(dpath=path, 
-#                                                                       timestamps_hungry_file=timestamps_hungry_file, 
-#                                                                       behavior_hungry_file=behavior_hungry_file,
-#                                                                       timestamps_satiated_file=timestamps_satiated_file,
-#                                                                       behavior_satiated_file=behavior_satiated_file)
-        
-#         return combined_timestamps, combined_behavior
-    
-#     else:
-#         # Just return the timeStamps.csv and behavior.csv files
-#         path = os.path.join(dpath, animal_id)
-
-#         # Assuming specific file naming convention
-#         timeStamps_file = dpath + 'timeStamps.csv'
-#         behavior_file = dpath + f'{animal_id}_Satiation_recording_behavior.csv'
-
-#         timestamps = pd.read_csv(os.path.join(dpath, timeStamps_file))
-#         behavior = pd.read_csv(os.path.join(dpath, behavior_file))
-
-#         return timestamps, behavior
-
 # Part of step two 
-""" Please modify this code to read directly from scope_time and behavior, and concatenate scope_time if there are two entires
-per animal. Behavior time will alwasy be one single file. 
-"""
-def _concatenate_datasets(dpath, timestamps_hungry_file, behavior_hungry_file,  
-                                    timestamps_satiated_file, behavior_satiated_file):
+def combine_datasets(scope_times, behavior_data, animal_id):
     """
-    Helper function that concatenates two datasets of timestamps and behavior, adjusting the timestamps
-    of the second dataset to align with the first dataset. This function also removes
-    any time gaps between the the two behavior datasets.
+    Helper function that reads directly from scope_times and behavior, and concatenates scope_time if there are two entires.
 
     Args:
-        dpath (str): The path to the directory containing the dataset files.
-        timestamps_hungry_file (str): The filename of the timestamps file for the hungry dataset.
-        behavior_hungry_file (str): The filename of the behavior file for the hungry dataset.
-        timestamps_satiated_file (str): The filename of the timestamps file for the satiated dataset.
-        behavior_satiated_file (str): The filename of the behavior file for the satiated dataset.
+        scope_times (dict): A dictionary containing scope times for different animal IDs.
+        behavior_data (dict): A dictionary containing behavioral data for different animal IDs.
+        animal_id (str): The ID of the animal for which data needs to be concatenated.
 
     Returns:
         tuple: A tuple containing the concatenated timestamps and behavior datasets.
     """
 
-    # Load datasets
-    timestamps_hungry = pd.read_csv(os.path.join(dpath, timestamps_hungry_file))
-    behavior_hungry = pd.read_csv(os.path.join(dpath, behavior_hungry_file))
+    # Retrieve the timestamps
+    if animal_id in scope_times and len(scope_times[animal_id]) == 2:
+        # Concatenate datasets
+        timestamps1 = scope_times[animal_id][0]
+        timestamps2 = scope_times[animal_id][1]
 
-    timestamps_satiated = pd.read_csv(os.path.join(dpath, timestamps_satiated_file))
-    behavior_satiated = pd.read_csv(os.path.join(dpath, behavior_satiated_file))
+        # Concatenate the two datasets
+        ret_timestamps = pd.concat([timestamps1, timestamps2], ignore_index=True)
+    else:
+        # Just set ret_timestamps to the singular timestamps dataset
+        ret_timestamps = scope_times[animal_id][0]
 
-    # Convert behavior time to ms
-    behavior_hungry['Time'] *= 1000
-    behavior_satiated['Time'] *= 1000
+    # Retrieve the behavior data
+    if animal_id in behavior_data:
+        ret_behavior = behavior_data[animal_id]
+    else:
+        # Just set ret_behavior to None and print an error message
+        print(f"Error: No behavior data found for {animal_id}")
+        ret_behavior = None
 
-    # Calculate the gap and adjust the satiated behavior timestamps
-    last_time_hungry = behavior_hungry['Time'].iloc[-1]
-    first_time_satiated = behavior_satiated['Time'].iloc[0]
-    time_gap = first_time_satiated - last_time_hungry
+    return ret_timestamps, ret_behavior
 
-    # Adjusting the satiated behavior dataset
-    behavior_satiated['Time'] -= time_gap
+# Main computing function for Step 3 and 3
+def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=False):
+    """
+    Processes and aligns the given minian dataset with the given scope times and behavior data.
 
-    # Correct the satiated timestamps
-    time_offset = behavior_satiated['Time'].iloc[0] * 1000
-    timestamps_satiated['Time Stamp (ms)'] += time_offset
+    Args:
+        animal_id (str): The ID of the animal for which data needs to be processed and aligned.
+        id_path (str): The path to the animal ID directory.
+        scope_times (dict): A dictionary containing scope times for different animal IDs.
+        behavior_data (dict): A dictionary containing behavioral data for different animal IDs.
 
-    # Concatenate datasets
-    combined_timestamps = pd.concat([timestamps_hungry, timestamps_satiated], ignore_index=True)
-    combined_behavior = pd.concat([behavior_hungry, behavior_satiated], ignore_index=True)
+    Returns:
+        tuple: A tuple containing the processed and aligned trace data and labels.
+    """
+    # Get minian_ds
+    dpath = os.path.join(id_path, "/" + animal_id)
+    minian_ds_path = os.path.join(dpath, "/minian")
+    minian_ds = open_minian(minian_ds_path)
 
-    return combined_timestamps, combined_behavior
+    # Step 3 Spikes
+    tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium = _process_spikes_and_calcium(minian_ds)
 
-# Step 3 Spikes
-def process_spikes_and_calcium(minian_ds):
+    # Step 4 align and interpolate
+    animal_timestamps, animal_behavior = combine_datasets(scope_times, behavior_data, animal_id)
+
+    # Calcium
+    tracealigned_calcium, labelsaligned_calcium = _align_and_interpolate(animal_timestamps, 
+                                                                        animal_behavior, 
+                                                                        tracenew_calcium, 
+                                                                        labelsnew_calcium)
+    # Spike
+    tracealigned_spike, labelsaligned_spike = _align_and_interpolate(animal_timestamps,
+                                                                    animal_behavior,
+                                                                    tracenew_spike,
+                                                                    labelsnew_spike)
+    
+    # Step 5 Save
+    # Reference:
+    # output_path_spike = r"E:\Xu\Miniscope\PL\Raw Data\Satiation\Session Combined\Spikes"   
+    # output_path_calcium = r"E:\Xu\Miniscope\PL\Raw Data\Satiation\Session Combined\Calcium" 
+    output_path_spike = os.path.join(id_path, "/Spikes")
+    output_path_calcium = os.path.join(id_path, "/Calcium")
+
+    # Save calcium
+    _save_trace_and_labels(tracealigned_calcium, labelsaligned_calcium, output_path_calcium, animal_id)
+    # Save spike
+    _save_trace_and_labels(tracealigned_spike, labelsaligned_spike, output_path_spike, animal_id)
+
+    if verbose:
+        print(f"Processed and aligned {animal_id}")
+
+    return tracealigned_calcium, labelsaligned_calcium, tracealigned_spike, labelsaligned_spike
+
+
+# Step 3 Spikes and Calcium
+def _process_spikes_and_calcium(minian_ds, verbose=False):
     """
     Processes spikes and calcium data from the given minian dataset.
 
@@ -201,15 +319,15 @@ def process_spikes_and_calcium(minian_ds):
     
     """
     # Process Spikes
-    tracenew_spike, labelsnew_spike = _process_helper(minian_ds, "S")
+    tracenew_spike, labelsnew_spike = _process_helper(minian_ds, "S", verbose)
 
     # Process Calcium
-    tracenew_calcium, labelsnew_calcium = _process_helper(minian_ds, "C")
+    tracenew_calcium, labelsnew_calcium = _process_helper(minian_ds, "C", verbose)
 
     return tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium
 
 # Part of step 3
-def _process_helper(minian_ds, label_str):
+def _process_helper(minian_ds, label_str, verbose=False):
     """
     Helper function for processing spikes or calcium data from the given minian dataset.
 
@@ -247,17 +365,17 @@ def _process_helper(minian_ds, label_str):
     neuron_del = len(todelete)
     neuron_now = len(tracenew[0])
 
-    print ('Deleted ' + str(neuron_del) + ' neurons out of the original ' + str(neuron_ori) + ' neurons, ' + str(neuron_now) + ' neurons remain')
+    if verbose:
+        print('Deleted ' + str(neuron_del) + ' neurons out of the original ' + str(neuron_ori) + ' neurons, ' + str(neuron_now) + ' neurons remain')
 
     return tracenew, labelsnew
 
 # Step 4 align and interpolate
-def align_and_interpolate(dpath, ca_timestamps, behavior_data, tracenew, labelsnew):
+def _align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsnew):
     """
     Aligns and interpolates behavioral data with calcium timestamps.
 
     Args:
-        dpath (str): The directory path where the CSV files are located.
         ca_timestamp (pandas.core.frame.DataFrame): The calcium timestamps.
         behavior_data (pandas.core.frame.DataFrame): The behavioral data.
         tracenew (numpy.ndarray): The calcium trace data.
@@ -268,10 +386,10 @@ def align_and_interpolate(dpath, ca_timestamps, behavior_data, tracenew, labelsn
 
     """
     # Load calcium timestamps from a CSV file
-    CA = ca_timestamps
+    CA = animal_timestamps
 
     # Load behavioral data from another CSV file
-    Behavior = behavior_data
+    Behavior = animal_behavior
 
     # Extract time column from behavioral data and adjust it for when miniscope record active is triggered
     behaviortime = Behavior['Time'].values
@@ -305,7 +423,7 @@ def align_and_interpolate(dpath, ca_timestamps, behavior_data, tracenew, labelsn
     return tracealigned, labelsaligned
 
 # Step 5 save
-def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
+def _save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
     """
     Saves the aligned trace and labels to a pickle file.
 
@@ -318,5 +436,9 @@ def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, anim
     # Save the aligned trace and labels to a pickle file
     df = pd.DataFrame(data=tracealigned, index=labelsaligned)
     df.to_pickle(os.path.join(output_path_calcium, str(animal_id + ".pkl")))
+
+
+if __name__ == "__main__":
+    main()
 
 
