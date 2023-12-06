@@ -93,7 +93,9 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
         
         output = [p.get() for p in results]
 
-    return True
+    output = np.array(output)
+
+    return output
 
 # Step 1 parse
 def parse_scope_times(exp_path, id_path, verbose=False):
@@ -229,26 +231,44 @@ def combine_datasets(scope_times, behavior_data, animal_id):
     Returns:
         tuple: A tuple containing the concatenated timestamps and behavior datasets.
     """
-
-    # Retrieve the timestamps
-    if animal_id in scope_times and len(scope_times[animal_id]) == 2:
-        # Concatenate datasets
-        timestamps1 = scope_times[animal_id][0]
-        timestamps2 = scope_times[animal_id][1]
-
-        # Concatenate the two datasets
-        ret_timestamps = pd.concat([timestamps1, timestamps2], ignore_index=True)
-    else:
-        # Just set ret_timestamps to the singular timestamps dataset
-        ret_timestamps = scope_times[animal_id][0]
-
     # Retrieve the behavior data
     if animal_id in behavior_data:
+        # np.diff on the behavior file (miniscope recording active) to find the start and end of the recording
+        time_diff = np.diff(behavior_data[animal_id]['Miniscope record active'])
+        # Identifying where the recording resets
+        resets = np.where(time_diff < 0)[0] + 1
+        # Retrieve the timestamps for each part to reset in timestamps df
+        # Gap: start of second part - end of first part e.g. beginning: -1 end: 1 
+
+
         ret_behavior = behavior_data[animal_id]
     else:
         # Just set ret_behavior to None and print an error message
         print(f"Error: No behavior data found for {animal_id}")
         ret_behavior = None
+
+    # Retrieve the timestamps
+    if animal_id in scope_times and len(scope_times[animal_id]) > 1:
+        # Concatenate datasets, accounting for gaps in recording using behavior miniscope record active.
+
+        # Initialize ret_timestamps to the first timestamps dataset
+        ret_timestamps = scope_times[animal_id][0]
+
+        for idx in range(1, len(scope_times[animal_id])):
+            # Get the current timestamps dataset
+            timestamps = scope_times[animal_id][idx]
+
+            # Get the gap based off of the time in behavior data, i.e. start of second part - end of first part
+            gap = ret_behavior['Time'].iloc[resets[idx - 1]] - ret_behavior['Time'].iloc[resets[idx - 1] - 1]
+
+            # Add the gap to the current timestamps dataset along with end of the previous timestamps dataset
+            timestamps['Time Stamp (ms)'] += ret_timestamps['Time Stamp (ms)'].iloc[-1] + gap
+
+            # Concatenate the current timestamps dataset with the previous timestamps dataset
+            ret_timestamps = pd.concat([ret_timestamps, timestamps], ignore_index=True)
+    else:
+        # Just set ret_timestamps to the singular timestamps dataset
+        ret_timestamps = scope_times[animal_id][0]
 
     return ret_timestamps, ret_behavior
 
