@@ -234,14 +234,14 @@ def combine_datasets(scope_times, behavior_data, animal_id):
     # Retrieve the behavior data
     if animal_id in behavior_data:
         # np.diff on the behavior file (miniscope recording active) to find the start and end of the recording
-        time_diff = np.diff(behavior_data[animal_id]['Miniscope record active'])
+        time_diff = np.diff(behavior_data[animal_id]['Miniscope record active']) #np.where(np.diff)!=0 gap >50
         # Identifying where the recording resets
         resets = np.where(time_diff < 0)[0] + 1
         # Retrieve the timestamps for each part to reset in timestamps df
         # Gap: start of second part - end of first part e.g. beginning: -1 end: 1 
 
 
-        ret_behavior = behavior_data[animal_id]
+        ret_behavior = behavior_data[animal_id]  #minus the beginning of the first recording onset
     else:
         # Just set ret_behavior to None and print an error message
         print(f"Error: No behavior data found for {animal_id}")
