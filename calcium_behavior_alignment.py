@@ -349,8 +349,8 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     # Reference:
     # output_path_spike = r"E:\Xu\Miniscope\PL\Raw Data\Satiation\Session Combined\Spikes"   
     # output_path_calcium = r"E:\Xu\Miniscope\PL\Raw Data\Satiation\Session Combined\Calcium" 
-    output_path_spike = os.path.join(id_path, "/Spikes")
-    output_path_calcium = os.path.join(id_path, "/Calcium")
+    output_path_spike = os.path.join(id_path, "Spikes")
+    output_path_calcium = os.path.join(id_path, "Calcium")
 
     # Save calcium
     save_trace_and_labels(tracealigned_calcium, labelsaligned_calcium, output_path_calcium, animal_id)
@@ -452,8 +452,8 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     behaviortime = Behavior['Time (s)'].values
     behaviortime = behaviortime - behaviortime[np.where(Behavior['Miniscope record active'] > 0)[0][0]]
 
-    # Convert calcium timestamps from milliseconds to seconds
-    catime = CA['Time Stamp (s)'].values / 1000
+    # Extract time column from calcium timestamps
+    catime = CA['Time Stamp (s)'].values
 
     # Extract cue and bar columns from the behavioral data
     cue = Behavior['Tone active'].values
