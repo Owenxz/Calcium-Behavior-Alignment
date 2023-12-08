@@ -172,7 +172,7 @@ def parse_scope_times(exp_path, id_path, verbose=False):
 
         # Erronous animal IDs, i.e. animals with no entries or more than two entries
         erronous_animal_ids = [animal_id for animal_id in scope_times if len(scope_times[animal_id]) not in [1, 2]]
-        print(f"Erronous animal IDs: {erronous_animal_ids}")
+        print(f"Erronous animal IDs: {'None' if len(erronous_animal_ids) == 0 else erronous_animal_ids}")
 
     return scope_times
 
@@ -326,6 +326,8 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     # Get minian_ds
     dpath = os.path.join(id_path, animal_id)
     minian_ds_path = os.path.join(dpath, "minian")
+    if verbose:
+        print(f"Processing animal ID {animal_id} from minian_ds_path: {minian_ds_path}")
     minian_ds = open_minian(minian_ds_path)
 
     # Step 3 Spikes
