@@ -66,16 +66,16 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
             print(f"Experiment path: {exp_path}")
 
         if not os.path.exists(id_path):
-            print(f"Error: Experiment path {id_path} does not exist")
+            print(f"Error: Id path {id_path} does not exist")
             return False
         else:
-            print(f"Experiment path: {id_path}")
+            print(f"Id path: {id_path}")
 
         if not os.path.exists(beh_path):
-            print(f"Error: Experiment path {beh_path} does not exist")
+            print(f"Error: Behavior path {beh_path} does not exist")
             return False
         else:
-            print(f"Experiment path: {beh_path}")
+            print(f"Behavior path: {beh_path}")
 
     # Step 1 parse scope_times and behavior_data
     scope_times = parse_scope_times(exp_path, id_path, verbose)
@@ -94,6 +94,11 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
         output = [p.get() for p in results]
 
     output = np.array(output)
+
+    # Print summary of results
+    if verbose:
+        print(f"Successfully processed and aligned {len(output[output[:, 0] == 'True'])} animal IDs: {output[output[:, 0] == 'True'][:, 1]}")
+        print(f"Failed to process and align {len(output[output[:, 0] == 'False'])} animal IDs: {output[output[:, 0] == 'False'][:, 1]}")
 
     return output
 
@@ -160,7 +165,6 @@ def parse_scope_times(exp_path, id_path, verbose=False):
     if verbose:
         print(f"Found {len(scope_times)} animal IDs")
         print(f"Animal IDs: {scope_times.keys()}")
-        print(f"Found {entries_count} entries")
 
         # Number of animals with two entries
         two_entries_count = len([animal_id for animal_id in scope_times if len(scope_times[animal_id]) == 2])
@@ -326,8 +330,13 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     # Get minian_ds
     dpath = os.path.join(id_path, animal_id)
     minian_ds_path = os.path.join(dpath, "minian")
+    if not os.path.exists(minian_ds_path) and verbose:
+        print(f"Minian dataset path {minian_ds_path} not found for animal ID {animal_id}")
+        return (False, animal_id)
+    
     if verbose:
         print(f"Processing animal ID {animal_id} from minian_ds_path: {minian_ds_path}")
+
     minian_ds = open_minian(minian_ds_path)
 
     # Step 3 Spikes
@@ -356,13 +365,17 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
 
     # Save calcium
     save_trace_and_labels(tracealigned_calcium, labelsaligned_calcium, output_path_calcium, animal_id)
+    if verbose:
+        print(f"Saved {animal_id} Calciums to {output_path_calcium}")
     # Save spike
     save_trace_and_labels(tracealigned_spike, labelsaligned_spike, output_path_spike, animal_id)
+    if verbose:
+        print(f"Saved {animal_id} Spikes to {output_path_spike}")
 
     if verbose:
-        print(f"Processed and aligned {animal_id}")
+        print(f"Successfully aligned animal ID {animal_id}")
 
-    return tracealigned_calcium, labelsaligned_calcium, tracealigned_spike, labelsaligned_spike
+    return (True, animal_id)
 
 
 # Step 3 Spikes and Calcium
