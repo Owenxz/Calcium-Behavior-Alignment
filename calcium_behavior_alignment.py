@@ -464,8 +464,8 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     baraligned = np.interp(catime, behaviortime, bar)
 
     # Check if miniscope data is shorter than timestamp data and pad if necessary ?
-    if tracenew.shape[1] < len(catime):
-        padding_length = len(catime) - tracenew.shape[1]
+    if tracenew.shape[0] < len(catime):
+        padding_length = len(catime) - tracenew.shape[0]
         padding = np.zeros((tracenew.shape[0], padding_length))
         tracenew_padded = np.hstack((tracenew, padding))
     else:
