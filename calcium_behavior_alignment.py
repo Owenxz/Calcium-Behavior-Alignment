@@ -141,6 +141,12 @@ def parse_scope_times(exp_path, id_path, verbose=False):
                 if os.path.exists(csv_file_path):
                     scope_times[animal_id][var_name] = pd.read_csv(csv_file_path)
 
+                # Convert timestamps to seconds
+                scope_times[animal_id][var_name]['Time Stamp (ms)'] /= 1000.0
+
+                # Change column name
+                scope_times[animal_id][var_name].rename(columns={'Time Stamp (ms)': 'Time Stamp (s)'}, inplace=True)
+
                 entries_count += 1
 
                 if entries_count > 2:
@@ -219,7 +225,7 @@ def parse_behavior_times(beh_path, experiment, animal_ids):
     return behavior_data
 
 # Part of step two 
-def combine_datasets(scope_times, behavior_data, animal_id):
+def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     """
     Helper function that reads directly from scope_times and behavior, and concatenates scope_time if there are two entires.
 
@@ -227,6 +233,7 @@ def combine_datasets(scope_times, behavior_data, animal_id):
         scope_times (dict): A dictionary containing scope times for different animal IDs.
         behavior_data (dict): A dictionary containing behavioral data for different animal IDs.
         animal_id (str): The ID of the animal for which data needs to be concatenated.
+        verbose (bool): Whether to print verbose output.
 
     Returns:
         tuple: A tuple containing the concatenated timestamps and behavior datasets.
@@ -240,16 +247,23 @@ def combine_datasets(scope_times, behavior_data, animal_id):
         # recording_sections is a list of tuples, where each tuple is the (start, end) of a recording
         recording_sections = []
         section_start = time_diff[0]
-        for idx in time_diff[1:]:
-            if idx - section_start >= 50:
+        
+        breaks = np.where(np.diff(time_diff) >= 50)[0] + 1
+        
+        if breaks:
+            for idx in breaks:
                 section_end = idx
                 recording_sections.append((section_start, section_end))
-                section_start = idx
-
+                section_start = time_diff[idx + 1]
+                
+        # Append the last (section_start, section_end)
+        section_end = time_diff[-1]
+        recording_sections.append((section_start, section_end))
+                
         ret_behavior = behavior_data[animal_id]  #minus the beginning of the first recording onset
 
         # Offset ret_Behaviors by the first recording onset
-        ret_behavior['Time'] = ret_behavior['Time'] - ret_behavior['Time'].iloc[recording_sections[0][0]]
+        ret_behavior['Time (s)'] = ret_behavior['Time (s)'] - ret_behavior['Time (s)'].iloc[recording_sections[0][0]]
 
     else:
         # Just set ret_behavior to None and print an error message
@@ -261,26 +275,38 @@ def combine_datasets(scope_times, behavior_data, animal_id):
         # Concatenate datasets, accounting for gaps in recording using behavior miniscope record active.
 
         # Initialize ret_timestamps to the first timestamps dataset
-        ret_timestamps = scope_times[animal_id][0]
+        first_key = list(scope_times[animal_id].keys())[0]
+        ret_timestamps = scope_times[animal_id][first_key]
 
         for idx in range(1, len(scope_times[animal_id])):
             # Get the current timestamps dataset
-            timestamps = scope_times[animal_id][idx]
+            key = list(scope_times[animal_id].keys())[idx]
+            timestamps = scope_times[animal_id][key]
 
             # Get the gap based off of the time in behavior data, i.e. start of second part - end of first part
-            start_of_next_recording = ret_behavior['Time'].iloc[recording_sections[idx][0]]
-            end_of_prev_recording = ret_behavior['Time'].iloc[recording_sections[idx - 1][1] - 1]
+            start_of_next_recording = ret_behavior['Time (s)'].iloc[recording_sections[idx][0]]
+            end_of_prev_recording = ret_behavior['Time (s)'].iloc[recording_sections[idx - 1][1]]
             gap = start_of_next_recording - end_of_prev_recording
 
             # Add the gap to the current timestamps dataset along with end of the previous timestamps dataset
-            timestamps['Time Stamp (ms)'] += ret_timestamps['Time Stamp (ms)'].iloc[-1] + gap
+            timestamps['Time Stamp (s)'] += ret_timestamps['Time Stamp (s)'].iloc[-1] + gap
 
             # Concatenate the current timestamps dataset with the previous timestamps dataset
             ret_timestamps = pd.concat([ret_timestamps, timestamps], ignore_index=True)
     else:
         # Just set ret_timestamps to the singular timestamps dataset
-        ret_timestamps = scope_times[animal_id][0]
+        first_key = list(scope_times[animal_id].keys())[0]
+        ret_timestamps = scope_times[animal_id][first_key]
 
+    # Sanity check
+    # Check if miniscope recording active - 1 is similar value as concatenated ret_timestamps last value
+    if verbose:
+        print(f"Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
+        print(f"Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
+        print(f"time_diff: {time_diff}")
+        print(f"recording sections: {recording_sections}")
+        print(f"breaks: {breaks}")
+        
     return ret_timestamps, ret_behavior
 
 # Main computing function for Step 3 and 3
@@ -306,7 +332,7 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium = process_spikes_and_calcium(minian_ds)
 
     # Step 4 align and interpolate
-    animal_timestamps, animal_behavior = combine_datasets(scope_times, behavior_data, animal_id)
+    animal_timestamps, animal_behavior = combine_datasets(scope_times, behavior_data, animal_id, verbose)
 
     # Calcium
     tracealigned_calcium, labelsaligned_calcium = align_and_interpolate(animal_timestamps, 
@@ -407,7 +433,7 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     Aligns and interpolates behavioral data with calcium timestamps.
 
     Args:
-        ca_timestamp (pandas.core.frame.DataFrame): The calcium timestamps.
+        timestamp (pandas.core.frame.DataFrame): The calcium timestamps.
         behavior_data (pandas.core.frame.DataFrame): The behavioral data.
         tracenew (numpy.ndarray): The calcium trace data.
         labelsnew (numpy.ndarray): The labels for the calcium trace data.
@@ -423,11 +449,11 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     Behavior = animal_behavior
 
     # Extract time column from behavioral data and adjust it for when miniscope record active is triggered
-    behaviortime = Behavior['Time'].values
+    behaviortime = Behavior['Time (s)'].values
     behaviortime = behaviortime - behaviortime[np.where(Behavior['Miniscope record active'] > 0)[0][0]]
 
     # Convert calcium timestamps from milliseconds to seconds
-    catime = CA['Time Stamp (ms)'].values / 1000
+    catime = CA['Time Stamp (s)'].values / 1000
 
     # Extract cue and bar columns from the behavioral data
     cue = Behavior['Tone active'].values
