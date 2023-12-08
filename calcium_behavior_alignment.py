@@ -298,23 +298,23 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
         tuple: A tuple containing the processed and aligned trace data and labels.
     """
     # Get minian_ds
-    dpath = os.path.join(id_path, "/" + animal_id)
-    minian_ds_path = os.path.join(dpath, "/minian")
+    dpath = os.path.join(id_path, animal_id)
+    minian_ds_path = os.path.join(dpath, "minian")
     minian_ds = open_minian(minian_ds_path)
 
     # Step 3 Spikes
-    tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium = _process_spikes_and_calcium(minian_ds)
+    tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium = process_spikes_and_calcium(minian_ds)
 
     # Step 4 align and interpolate
     animal_timestamps, animal_behavior = combine_datasets(scope_times, behavior_data, animal_id)
 
     # Calcium
-    tracealigned_calcium, labelsaligned_calcium = _align_and_interpolate(animal_timestamps, 
+    tracealigned_calcium, labelsaligned_calcium = align_and_interpolate(animal_timestamps, 
                                                                         animal_behavior, 
                                                                         tracenew_calcium, 
                                                                         labelsnew_calcium)
     # Spike
-    tracealigned_spike, labelsaligned_spike = _align_and_interpolate(animal_timestamps,
+    tracealigned_spike, labelsaligned_spike = align_and_interpolate(animal_timestamps,
                                                                     animal_behavior,
                                                                     tracenew_spike,
                                                                     labelsnew_spike)
@@ -327,9 +327,9 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     output_path_calcium = os.path.join(id_path, "/Calcium")
 
     # Save calcium
-    _save_trace_and_labels(tracealigned_calcium, labelsaligned_calcium, output_path_calcium, animal_id)
+    save_trace_and_labels(tracealigned_calcium, labelsaligned_calcium, output_path_calcium, animal_id)
     # Save spike
-    _save_trace_and_labels(tracealigned_spike, labelsaligned_spike, output_path_spike, animal_id)
+    save_trace_and_labels(tracealigned_spike, labelsaligned_spike, output_path_spike, animal_id)
 
     if verbose:
         print(f"Processed and aligned {animal_id}")
@@ -338,7 +338,7 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
 
 
 # Step 3 Spikes and Calcium
-def _process_spikes_and_calcium(minian_ds, verbose=False):
+def process_spikes_and_calcium(minian_ds, verbose=False):
     """
     Processes spikes and calcium data from the given minian dataset.
 
@@ -402,7 +402,7 @@ def _process_helper(minian_ds, label_str, verbose=False):
     return tracenew, labelsnew
 
 # Step 4 align and interpolate
-def _align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsnew):
+def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsnew):
     """
     Aligns and interpolates behavioral data with calcium timestamps.
 
@@ -454,7 +454,7 @@ def _align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsn
     return tracealigned, labelsaligned
 
 # Step 5 save
-def _save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
+def save_trace_and_labels(tracealigned, labelsaligned, output_path_calcium, animal_id):
     """
     Saves the aligned trace and labels to a pickle file.
 
