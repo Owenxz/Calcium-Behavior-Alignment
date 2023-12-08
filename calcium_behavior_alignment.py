@@ -88,8 +88,19 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
         print(f"Processing and aligning {len(animal_ids)} animal IDs with {num_processes} process(es)")
 
     with mp.Pool(processes=num_processes) as pool:
-        results = [pool.apply_async(process_and_align, args=(animal_id, id_path, scope_times[animal_id], behavior_data, verbose))
-                   for animal_id in animal_ids]
+        results = []
+        for animal_id in animal_ids:
+            if animal_id not in scope_times:
+                print(f"Error: No scope times found for {animal_id}")
+                results.append((False, animal_id))
+                continue
+                
+            if animal_id not in behavior_data:
+                print(f"Error: No behavior data found for {animal_id}")
+                results.append((False, animal_id))
+                continue
+
+            results.append(pool.apply_async(process_and_align, args=(animal_id, id_path, scope_times, behavior_data, verbose)))
         
         output = [p.get() for p in results]
 
@@ -305,11 +316,11 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     # Sanity check
     # Check if miniscope recording active - 1 is similar value as concatenated ret_timestamps last value
     if verbose:
-        print(f"Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
-        print(f"Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
-        print(f"time_diff: {time_diff}")
-        print(f"recording sections: {recording_sections}")
-        print(f"breaks: {breaks}")
+        print(f"Combining Data ({animal_id}): Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
+        print(f"Combining Data ({animal_id}): Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
+        print(f"Combining Data ({animal_id}): time_diff: {time_diff}")
+        print(f"Combining Data ({animal_id}): recording sections: {recording_sections}")
+        print(f"Combining Data ({animal_id}): breaks: {breaks}")
         
     return ret_timestamps, ret_behavior
 
