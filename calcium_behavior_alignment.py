@@ -233,15 +233,24 @@ def combine_datasets(scope_times, behavior_data, animal_id):
     """
     # Retrieve the behavior data
     if animal_id in behavior_data:
-        # np.diff on the behavior file (miniscope recording active) to find the start and end of the recording
-        time_diff = np.diff(behavior_data[animal_id]['Miniscope record active']) #np.where(np.diff)!=0 gap >50
-        # Identifying where the recording resets
-        resets = np.where(time_diff < 0)[0] + 1
-        # Retrieve the timestamps for each part to reset in timestamps df
-        # Gap: start of second part - end of first part e.g. beginning: -1 end: 1 
+        # Retrieve indicies in behavior_data where the recording resets
+        time_diff = np.where(np.diff(behavior_data[animal_id]['Miniscope record active']) != 0)[0] + 1
 
+        # Section out time_diff into separate recording resets; i.e. if there is an index gap of at these 50, then there is a reset
+        # recording_sections is a list of tuples, where each tuple is the (start, end) of a recording
+        recording_sections = []
+        section_start = time_diff[0]
+        for idx in time_diff[1:]:
+            if idx - section_start >= 50:
+                section_end = idx
+                recording_sections.append((section_start, section_end))
+                section_start = idx
 
         ret_behavior = behavior_data[animal_id]  #minus the beginning of the first recording onset
+
+        # Offset ret_Behaviors by the first recording onset
+        ret_behavior['Time'] = ret_behavior['Time'] - ret_behavior['Time'].iloc[recording_sections[0][0]]
+
     else:
         # Just set ret_behavior to None and print an error message
         print(f"Error: No behavior data found for {animal_id}")
@@ -259,7 +268,9 @@ def combine_datasets(scope_times, behavior_data, animal_id):
             timestamps = scope_times[animal_id][idx]
 
             # Get the gap based off of the time in behavior data, i.e. start of second part - end of first part
-            gap = ret_behavior['Time'].iloc[resets[idx - 1]] - ret_behavior['Time'].iloc[resets[idx - 1] - 1]
+            start_of_next_recording = ret_behavior['Time'].iloc[recording_sections[idx][0]]
+            end_of_prev_recording = ret_behavior['Time'].iloc[recording_sections[idx - 1][1] - 1]
+            gap = start_of_next_recording - end_of_prev_recording
 
             # Add the gap to the current timestamps dataset along with end of the previous timestamps dataset
             timestamps['Time Stamp (ms)'] += ret_timestamps['Time Stamp (ms)'].iloc[-1] + gap
