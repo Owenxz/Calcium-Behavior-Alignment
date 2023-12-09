@@ -78,38 +78,59 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
             print(f"Behavior path: {beh_path}")
 
     # Step 1 parse scope_times and behavior_data
-    scope_times = parse_scope_times(exp_path, id_path, verbose)
+    manager = mp.Manager()
+    scope_times = manager.dict(parse_scope_times(exp_path, id_path, verbose))
     animal_ids = list(scope_times.keys())
-    behavior_data = parse_behavior_times(beh_path, experiment, animal_ids)
+    behavior_data = manager.dict(parse_behavior_times(beh_path, experiment, animal_ids))
 
     # Step 2 process animal data based on ID
     # Process and align spikes and calcium via multiprocessing
     if verbose:
         print(f"Processing and aligning {len(animal_ids)} animal IDs with {num_processes} process(es)")
 
-    with mp.Pool(processes=num_processes) as pool:
-        results = []
-        for animal_id in animal_ids:
-            if animal_id not in scope_times:
-                print(f"Error: No scope times found for {animal_id}")
-                results.append((False, animal_id))
-                continue
+#     with mp.Pool(processes=num_processes) as pool:
+#         results = []
+#         for animal_id in animal_ids:
+#             if animal_id not in scope_times:
+#                 print(f"Error: No scope times found for {animal_id}")
+#                 results.append((False, animal_id))
+#                 continue
                 
-            if animal_id not in behavior_data:
-                print(f"Error: No behavior data found for {animal_id}")
-                results.append((False, animal_id))
-                continue
+#             if animal_id not in behavior_data:
+#                 print(f"Error: No behavior data found for {animal_id}")
+#                 results.append((False, animal_id))
+#                 continue
 
-            results.append(pool.apply_async(process_and_align, args=(animal_id, id_path, scope_times, behavior_data, verbose)))
+#             results.append(pool.apply_async(process_and_align, args=(animal_id, id_path, scope_times, behavior_data, verbose)))
         
-        output = [p.get() for p in results]
+#         output = [p.get() for p in results]
+    
 
-    output = np.array(output)
+    results = []
+    for animal_id in animal_ids:
+        if animal_id not in scope_times:
+            print(f"Error: No scope times found for {animal_id}")
+            results.append((False, animal_id))
+            continue
+
+        if animal_id not in behavior_data:
+            print(f"Error: No behavior data found for {animal_id}")
+            results.append((False, animal_id))
+            continue
+
+        results.append(process_and_align(animal_id, id_path, scope_times, behavior_data, verbose))
+        
+    
+
+#     output = np.array(output)
+    output = results
 
     # Print summary of results
     if verbose:
-        print(f"Successfully processed and aligned {len(output[output[:, 0] == 'True'])} animal IDs: {output[output[:, 0] == 'True'][:, 1]}")
-        print(f"Failed to process and align {len(output[output[:, 0] == 'False'])} animal IDs: {output[output[:, 0] == 'False'][:, 1]}")
+        successful_ids = [result[1] for result in results if result[0] == True]
+        failed_ids = [result[1] for result in results if result[0] == False]
+        print(f"Successfully processed and aligned {len(successful_ids)} animal IDs: {successful_ids}")
+        print(f"Failed to process and align {len(failed_ids)} animal IDs: {failed_ids}")
 
     return output
 
@@ -265,7 +286,7 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
         
         breaks = np.where(np.diff(time_diff) >= 50)[0] + 1
         
-        if breaks:
+        if len(breaks) > 0:
             for idx in breaks:
                 section_end = idx
                 recording_sections.append((section_start, section_end))
@@ -318,9 +339,7 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     if verbose:
         print(f"Combining Data ({animal_id}): Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
         print(f"Combining Data ({animal_id}): Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
-        print(f"Combining Data ({animal_id}): time_diff: {time_diff}")
-        print(f"Combining Data ({animal_id}): recording sections: {recording_sections}")
-        print(f"Combining Data ({animal_id}): breaks: {breaks}")
+        print(f"Combining Data ({animal_id}): breaks: {breaks} -> recording sections: {recording_sections}")
         
     return ret_timestamps, ret_behavior
 
@@ -338,17 +357,24 @@ def process_and_align(animal_id, id_path, scope_times, behavior_data, verbose=Fa
     Returns:
         tuple: A tuple containing the processed and aligned trace data and labels.
     """
+    if verbose:
+        print(f"\n\nProcessing animal ID {animal_id}")
     # Get minian_ds
     dpath = os.path.join(id_path, animal_id)
     minian_ds_path = os.path.join(dpath, "minian")
     if not os.path.exists(minian_ds_path) and verbose:
         print(f"Minian dataset path {minian_ds_path} not found for animal ID {animal_id}")
         return (False, animal_id)
-    
-    if verbose:
-        print(f"Processing animal ID {animal_id} from minian_ds_path: {minian_ds_path}")
+        
+#     if verbose:
+#         print(f"Opening minian_ds {animal_id}")
+        
+#     print(f"Read access to the file: {os.access(minian_ds_path, os.R_OK)}")
 
     minian_ds = open_minian(minian_ds_path)
+    
+#     if verbose:
+#         print(f"DONE OPENING MINIAN_DS {animal_id}")
 
     # Step 3 Spikes
     tracenew_spike, labelsnew_spike, tracenew_calcium, labelsnew_calcium = process_spikes_and_calcium(minian_ds)
@@ -492,8 +518,8 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     # Check if miniscope data is shorter than timestamp data and pad if necessary ?
     if tracenew.shape[0] < len(catime):
         padding_length = len(catime) - tracenew.shape[0]
-        padding = np.zeros((tracenew.shape[0], padding_length))
-        tracenew_padded = np.hstack((tracenew, padding))
+        # Add padding to tracenew
+        tracenew_padded = np.pad(tracenew, ((0, padding_length), (0, 0)), mode='constant')
     else:
         tracenew_padded = tracenew
 
