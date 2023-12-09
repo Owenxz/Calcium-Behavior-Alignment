@@ -78,9 +78,10 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
             print(f"Behavior path: {beh_path}")
 
     # Step 1 parse scope_times and behavior_data
-    scope_times = parse_scope_times(exp_path, id_path, verbose)
+    manager = mp.Manager()
+    scope_times = manager.dict(parse_scope_times(exp_path, id_path, verbose))
     animal_ids = list(scope_times.keys())
-    behavior_data = parse_behavior_times(beh_path, experiment, animal_ids)
+    behavior_data = manager.dict(parse_behavior_times(beh_path, experiment, animal_ids))
 
     # Step 2 process animal data based on ID
     # Process and align spikes and calcium via multiprocessing
@@ -265,7 +266,7 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
         
         breaks = np.where(np.diff(time_diff) >= 50)[0] + 1
         
-        if breaks:
+        if len(breaks) > 0:
             for idx in breaks:
                 section_end = idx
                 recording_sections.append((section_start, section_end))
@@ -318,9 +319,7 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     if verbose:
         print(f"Combining Data ({animal_id}): Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
         print(f"Combining Data ({animal_id}): Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
-        print(f"Combining Data ({animal_id}): time_diff: {time_diff}")
-        print(f"Combining Data ({animal_id}): recording sections: {recording_sections}")
-        print(f"Combining Data ({animal_id}): breaks: {breaks}")
+        print(f"Combining Data ({animal_id}): breaks: {breaks} -> recording sections: {recording_sections}")
         
     return ret_timestamps, ret_behavior
 
@@ -492,8 +491,8 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     # Check if miniscope data is shorter than timestamp data and pad if necessary ?
     if tracenew.shape[0] < len(catime):
         padding_length = len(catime) - tracenew.shape[0]
-        padding = np.zeros((tracenew.shape[0], padding_length))
-        tracenew_padded = np.hstack((tracenew, padding))
+        # Add padding to tracenew
+        tracenew_padded = np.pad(tracenew, ((0, padding_length), (0, 0)), mode='constant')
     else:
         tracenew_padded = tracenew
 
