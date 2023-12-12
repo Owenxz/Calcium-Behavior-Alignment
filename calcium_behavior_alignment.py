@@ -277,26 +277,28 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     # Retrieve the behavior data
     if animal_id in behavior_data:
         # Retrieve indicies in behavior_data where the recording resets
-        time_diff = np.where(np.diff(behavior_data[animal_id]['Miniscope record active']) != 0)[0] + 1
-
+        record_active = behavior_data[animal_id]['Miniscope record active']
+        time = behavior_data[animal_id]['Time (s)']
+        time_diff = np.where(np.diff(record_active) != 0)[0] + 1
+        
         # Section out time_diff into separate recording resets; i.e. if there is an index gap of at these 50, then there is a reset
         # recording_sections is a list of tuples, where each tuple is the (start, end) of a recording
         recording_sections = []
         section_start = time_diff[0]
         
-        breaks = np.where(np.diff(time_diff) >= 50)[0] + 1
-        
+        breaks = time_diff[np.where(np.diff(time_diff)>=50)[0]]
         if len(breaks) > 0:
-            for idx in breaks:
-                section_end = idx
-                recording_sections.append((section_start, section_end))
-                section_start = time_diff[idx + 1]
+            for break_idx in breaks:
+                section_end = break_idx
+                if section_end - section_start > 50:
+                    recording_sections.append((section_start, section_end))
+                section_start = next((idx for idx in time_diff if idx > break_idx), None)
                 
         # Append the last (section_start, section_end)
         section_end = time_diff[-1]
         recording_sections.append((section_start, section_end))
                 
-        ret_behavior = behavior_data[animal_id]  #minus the beginning of the first recording onset
+        ret_behavior = behavior_data[animal_id].copy()
 
         # Offset ret_Behaviors by the first recording onset
         ret_behavior['Time (s)'] = ret_behavior['Time (s)'] - ret_behavior['Time (s)'].iloc[recording_sections[0][0]]
@@ -305,6 +307,11 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
         # Just set ret_behavior to None and print an error message
         print(f"Error: No behavior data found for {animal_id}")
         ret_behavior = None
+        
+    # Check if the number of recording sections matches the scope times sections
+    if len(recording_sections) != len(scope_times[animal_id]):
+        print(f"Error: Number of recording sections ({len(recording_sections)}) does not match the number of scope times sections ({len(scope_times[animal_id])}) for {animal_id}")
+        return None, None
 
     # Retrieve the timestamps
     if animal_id in scope_times and len(scope_times[animal_id]) > 1:
@@ -312,20 +319,18 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
 
         # Initialize ret_timestamps to the first timestamps dataset
         first_key = list(scope_times[animal_id].keys())[0]
-        ret_timestamps = scope_times[animal_id][first_key]
+        ret_timestamps = scope_times[animal_id][first_key].copy()
 
         for idx in range(1, len(scope_times[animal_id])):
             # Get the current timestamps dataset
             key = list(scope_times[animal_id].keys())[idx]
-            timestamps = scope_times[animal_id][key]
-
+            timestamps = scope_times[animal_id][key].copy()
+            
             # Get the gap based off of the time in behavior data, i.e. start of second part - end of first part
             start_of_next_recording = ret_behavior['Time (s)'].iloc[recording_sections[idx][0]]
-            end_of_prev_recording = ret_behavior['Time (s)'].iloc[recording_sections[idx - 1][1]]
-            gap = start_of_next_recording - end_of_prev_recording
-
+            
             # Add the gap to the current timestamps dataset along with end of the previous timestamps dataset
-            timestamps['Time Stamp (s)'] += ret_timestamps['Time Stamp (s)'].iloc[-1] + gap
+            timestamps['Time Stamp (s)'] += start_of_next_recording
 
             # Concatenate the current timestamps dataset with the previous timestamps dataset
             ret_timestamps = pd.concat([ret_timestamps, timestamps], ignore_index=True)
@@ -337,7 +342,7 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
     # Sanity check
     # Check if miniscope recording active - 1 is similar value as concatenated ret_timestamps last value
     if verbose:
-        print(f"Combining Data ({animal_id}): Behavior end of recording: {ret_behavior['Miniscope record active'].iloc[-1] - 1}")
+        print(f"Combining Data ({animal_id}): Behavior end of recording: {ret_behavior['Time (s)'].iloc[-1] - 1}")
         print(f"Combining Data ({animal_id}): Timestamp last value {ret_timestamps['Time Stamp (s)'].iloc[-1]}")
         print(f"Combining Data ({animal_id}): breaks: {breaks} -> recording sections: {recording_sections}")
         
