@@ -502,7 +502,7 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
 
     # Extract time column from behavioral data and adjust it for when miniscope record active is triggered
     behaviortime = Behavior['Time (s)'].values
-    behaviortime = behaviortime - behaviortime[np.where(Behavior['Miniscope record active'] > 0)[0][0]]
+#     behaviortime = behaviortime - behaviortime[np.where(Behavior['Miniscope record active'] > 0)[0][0]] #already did it in combine function
 
     # Extract time column from calcium timestamps
     catime = CA['Time Stamp (s)'].values
