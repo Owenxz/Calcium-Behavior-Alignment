@@ -119,11 +119,6 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
             continue
 
         results.append(process_and_align(animal_id, id_path, scope_times, behavior_data, verbose))
-        
-    
-
-#     output = np.array(output)
-    output = results
 
     # Print summary of results
     if verbose:
@@ -132,7 +127,7 @@ def execute(exp_path, id_path, beh_path, experiment, num_processes=2, verbose=Fa
         print(f"Successfully processed and aligned {len(successful_ids)} animal IDs: {successful_ids}")
         print(f"Failed to process and align {len(failed_ids)} animal IDs: {failed_ids}")
 
-    return output
+    return results
 
 # Step 1 parse
 def parse_scope_times(exp_path, id_path, verbose=False):
@@ -512,13 +507,25 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
     # Extract time column from calcium timestamps
     catime = CA['Time Stamp (s)'].values
 
-    # Extract cue and bar columns from the behavioral data
-    cue = Behavior['Tone active'].values
-    bar = Behavior['Bar Press active'].values
+    # # Extract cue and bar columns from the behavioral data
+    # cue = Behavior['Tone active'].values
+    # bar = Behavior['Bar Press active'].values
 
-    # Interpolate the behavioral data to align with the calcium timestamps
-    cuealigned = np.interp(catime, behaviortime, cue)
-    baraligned = np.interp(catime, behaviortime, bar)
+    # Initialize a list to store interpolated behavioral data
+    interpolated_behaviors = []
+
+    # Initialize a list to store the labels for the aligned data
+    labelsaligned = labelsnew
+
+    # Iterate over all behavior columns in behavior data except 
+    for column in Behavior.columns:
+        # Interpolate the behavior data to align with the calcium timestamps
+        interpolated_behaviors.append(np.interp(catime, behaviortime, Behavior[column].values))
+        labelsaligned = np.hstack((labelsaligned, column))
+
+    # # Interpolate the behavioral data to align with the calcium timestamps
+    # cuealigned = np.interp(catime, behaviortime, cue)
+    # baraligned = np.interp(catime, behaviortime, bar)
 
     # Check if miniscope data is shorter than timestamp data and pad if necessary ?
     if tracenew.shape[0] < len(catime):
@@ -529,10 +536,11 @@ def align_and_interpolate(animal_timestamps, animal_behavior, tracenew, labelsne
         tracenew_padded = tracenew
 
     # Stack the aligned behavioral data
-    tracealigned = np.vstack((tracenew_padded.T, cuealigned, baraligned))
+    tracealigned = np.vstack(tuple([tracenew_padded.T] + interpolated_behaviors))
+    # tracealigned = np.vstack((tracenew_padded.T, cuealigned, baraligned))
 
     # Concatenate labels for the aligned data
-    labelsaligned = np.hstack((labelsnew, 'cue', 'bar'))
+    # labelsaligned = np.hstack((labelsnew, 'cue', 'bar'))
 
     return tracealigned, labelsaligned
 
