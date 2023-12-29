@@ -160,6 +160,7 @@ def parse_scope_times(exp_path, id_path, verbose=False):
 
             # Time pattern: HH_MM_SS
             time_dirs = glob.glob(os.path.join(date_dir, '[0-2][0-9]_[0-5][0-9]_[0-5][0-9]'))
+            time_dirs.sort()
             for time_dir in time_dirs:
                 # Extract time for naming
                 time = os.path.basename(time_dir)
@@ -313,12 +314,16 @@ def combine_datasets(scope_times, behavior_data, animal_id, verbose=False):
         # Concatenate datasets, accounting for gaps in recording using behavior miniscope record active.
 
         # Initialize ret_timestamps to the first timestamps dataset
-        first_key = list(scope_times[animal_id].keys())[0]
+        # Sort the keys chronologically
+        sorted_keys = sorted(scope_times[animal_id].keys())
+
+        # Initialize ret_timestamps to the first timestamps dataset
+        first_key = sorted_keys[0]
         ret_timestamps = scope_times[animal_id][first_key].copy()
 
         for idx in range(1, len(scope_times[animal_id])):
-            # Get the current timestamps dataset
-            key = list(scope_times[animal_id].keys())[idx]
+            # Get the current timestamps dataset using the sorted key
+            key = sorted_keys[idx]
             timestamps = scope_times[animal_id][key].copy()
             
             # Get the gap based off of the time in behavior data, i.e. start of second part - end of first part
